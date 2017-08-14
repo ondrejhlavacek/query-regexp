@@ -1,0 +1,14 @@
+version: "2"
+services:
+  regexp:
+    build: .
+    tty: true
+    stdin_open: true
+    command: sh -c '/code/run.sh'
+    working_dir: /code
+    volumes:
+      - ./:/code
+    environment:
+      - KBC_STORAGE_API_TOKEN
+      - KBC_TABLE_ID
+
