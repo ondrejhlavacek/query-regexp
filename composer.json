@@ -1,8 +1,14 @@
 {
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/keboola/sql-formatter"
+        }
+    ],
     "require": {
         "keboola/storage-api-client": "^7.0",
         "keboola/php-temp": "^0.1.6",
         "sebastian/diff": "^1.4",
-        "jdorn/sql-formatter": "^1.2"
+        "jdorn/sql-formatter": "dev-master"
     }
 }

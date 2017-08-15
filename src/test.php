@@ -51,11 +51,10 @@ while($csv->current()) {
     $row = $csv->current();
     list($projectId, $configId, $rowId, $backend, $queryNumber, $query) = $row;
 
-
     $result1tmp = trim(preg_replace($re1, '$1', $query));
     $result1Arr = [];
 
-    $result2 = trim(SqlFormatter::removeComments($query));
+    $result2 = SqlFormatter::removeComments($query);
 
     // manually strip lines beginning with a comment from old regexp
     foreach (explode("\n", $result1tmp) as $key => $line) {
@@ -78,8 +77,10 @@ while($csv->current()) {
         file_put_contents("/code/report/{$errors}.diff", $differ->diff(SqlFormatter::format($result1, false), SqlFormatter::format($result2, false)));
         file_put_contents("/code/report/{$errors}.result1", $result1);
         file_put_contents("/code/report/{$errors}.result1-formatted", SqlFormatter::format($result1, false));
+        file_put_contents("/code/report/{$errors}.result1-diff", $differ->diff(SqlFormatter::format($query, false), SqlFormatter::format($result1, false)));
         file_put_contents("/code/report/{$errors}.result2", $result2);
         file_put_contents("/code/report/{$errors}.result2-formatted", SqlFormatter::format($result2, false));
+        file_put_contents("/code/report/{$errors}.result2-diff", $differ->diff(SqlFormatter::format($query, false), SqlFormatter::format($result2, false)));
         file_put_contents("/code/report/{$errors}.meta", "line {$count}\nproject {$projectId}\nconfig {$configId}\nrow {$rowId}\nqueryNumber {$queryNumber}");
         $errors++;
     }
