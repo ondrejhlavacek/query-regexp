@@ -4,7 +4,7 @@ services:
     build: .
     tty: true
     stdin_open: true
-    command: sh -c '/code/run.sh'
+    entrypoint: /code/run.sh
     working_dir: /code
     volumes:
       - ./:/code

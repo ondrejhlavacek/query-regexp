@@ -1,18 +1,27 @@
 <?php
 require('/code/vendor/autoload.php');
 
-if (!getenv('KBC_STORAGE_API_TOKEN') || !getenv('KBC_TABLE_ID')) {
-    print "Missing envs KBC_STORAGE_API_TOKEN or KBC_TABLE_ID\n";
-    exit(1);
+if (!isset($argv[1])) {
+    if (!getenv('KBC_STORAGE_API_TOKEN') || !getenv('KBC_TABLE_ID')) {
+        print "Missing envs KBC_STORAGE_API_TOKEN or KBC_TABLE_ID\n";
+        exit(1);
+    }
+    $client = new \Keboola\StorageApi\Client(["token" => getenv('KBC_STORAGE_API_TOKEN')]);
+    $temp = new \Keboola\Temp\Temp();
+    $fileInfo = $temp->createTmpFile('queries');
+    $exporter = new \Keboola\StorageApi\TableExporter($client);
+    $exporter->exportTable(getenv('KBC_TABLE_ID'), $fileInfo->getPathname(), ["gzip" => false]);
+    print "File downloaded\n";
+    $csv = new \Keboola\Csv\CsvFile($fileInfo->getPathname());
+} else {
+    $csv = new \Keboola\Csv\CsvFile($argv[1]);
 }
 
-$client = new \Keboola\StorageApi\Client(["token" => getenv('KBC_STORAGE_API_TOKEN')]);
-$temp = new \Keboola\Temp\Temp();
-$fileInfo = $temp->createTmpFile('queries');
-$exporter = new \Keboola\StorageApi\TableExporter($client);
-$exporter->exportTable(getenv('KBC_TABLE_ID'), $fileInfo->getPathname(), ["gzip" => false]);
-print "File downloaded\n";
-$csv = new \Keboola\Csv\CsvFile($fileInfo->getPathname());
+$limit = null;
+if (isset($argv[2])) {
+    $limit = $argv[2];
+}
+
 $csv->rewind();
 $csv->next();
 $re1 = '@(([\'"]).*?[^\\\]\2)|((?:\#|--).*?$|/\*(?:[^/*]|/(?!\*)|\*(?!/)|(?R))*\*\/)\s*|(?<=;)\s+@ms';
@@ -32,6 +41,10 @@ $errors = 0;
 $differ = new \SebastianBergmann\Diff\Differ();
 
 while($csv->current()) {
+    if ($limit !== null && $count >= $limit) {
+        print "Hitting limit $limit\n";
+        exit(0);
+    }
     if ($count % 1000 == 0) {
         print "Row $count\n";
     }
@@ -56,21 +69,23 @@ while($csv->current()) {
     }
     $result1 = join("\n", $result1Arr);
 
-    if (compressSQL($result1) != compressSQL($result2)) {
+    if ($result1 != $result2
+        && compressSQL($result1) != compressSQL($result2)
+        && compressSQL(stripSingleLineInlineComments($result1)) != compressSQL(stripSingleLineInlineComments($result2))
+        && compressSQL(stripMultiLineComments(stripSingleLineInlineComments($result1))) != compressSQL(stripMultiLineComments(stripSingleLineInlineComments($result2)))
+    ) {
         file_put_contents("/code/report/{$errors}.original", $query);
         file_put_contents("/code/report/{$errors}.diff", $differ->diff(SqlFormatter::format($result1, false), SqlFormatter::format($result2, false)));
-        file_put_contents("/code/report/{$errors}.regexp1", $result1);
-        file_put_contents("/code/report/{$errors}.regexp2", $result2);
-        file_put_contents("/code/report/{$errors}.meta", "row {$count}\n");
+        file_put_contents("/code/report/{$errors}.result1", $result1);
+        file_put_contents("/code/report/{$errors}.result1-formatted", SqlFormatter::format($result1, false));
+        file_put_contents("/code/report/{$errors}.result2", $result2);
+        file_put_contents("/code/report/{$errors}.result2-formatted", SqlFormatter::format($result2, false));
+        file_put_contents("/code/report/{$errors}.meta", "line {$count}\nproject {$projectId}\nconfig {$configId}\nrow {$rowId}\nqueryNumber {$queryNumber}");
         $errors++;
     }
 
     $csv->next();
     $count++;
-    if ($errors > 10) {
-        print "Too many errors, aborting...\n";
-        die(1);
-    }
 }
 
 // remove ALL whitespace from queries
@@ -101,4 +116,23 @@ function removeWhiteSpaces($query) {
             $query
         )
     );
+}
+
+function stripSingleLineInlineComments($query) {
+    $result = [];
+    foreach (explode("\n", $query) as $key => $line) {
+        if (strpos($line, '--')) {
+            $line = substr($line, 0, strpos($line, '--') - 1);
+        }
+        if (strpos($line, '#')) {
+            $line = substr($line, 0, strpos($line, '#') - 1);
+        }
+        $result[] = $line;
+    }
+    return join("\n", $result);
+}
+
+function stripMultiLineComments($query) {
+    $re = '/\/\*.*?\*\//ms';
+    return preg_replace($re, '', $query);
 }
